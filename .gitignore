@@ -1,32 +1,53 @@
-# 1. Virtual Environments
+# ── Virtual Environments ──────────────────────────────────────────────────────
 venv_stable/
 venv/
-.env
+.venv/
 
-# 2. Python Artifacts
+# ── Secrets & Environment ─────────────────────────────────────────────────────
+.env
+*.env
+
+# ── Python Artifacts ──────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
 
-# 3. Heavy AI Weights & Models (GitHub Limit is 100MB)
+# ── AI Model Weights (GitHub 100MB limit) ─────────────────────────────────────
 *.pt
+*.pth
+*.onnx
+*.bin
+models/*
+!models/.gitkeep
 TrackNetV3/ckpts/
-yolo26n-pose_openvino_model/
 
-# 4. Large Media & Assets
-assets/*.mp4
-assets/*.avi
-assets/*.mov
+# ── Large Media & Assets ──────────────────────────────────────────────────────
+assets/*
+!assets/.gitkeep
 
-# 5. Generated Outputs & Data
-TrackNetV3/output/
-rally_data.csv
-*.png
+# ── TrackNetV3 (third-party repo outputs) ─────────────────────────────────────
+TrackNetV3/output/*
+!TrackNetV3/output/.gitkeep
 
-# 6. Java / Maven (Analyzer Backend)
+# ── Pipeline Outputs (generated, not source) ──────────────────────────────────
+data/output/*
+data/input/*
+data/temp/*
+!data/output/.gitkeep
+!data/input/.gitkeep
+!data/temp/.gitkeep
+
+# ── Java / Maven ──────────────────────────────────────────────────────────────
+backend/target/
 analyzer/target/
 *.class
+*.jar
 
-# 7. IDE & OS Files
+# ── IDE & OS Files ────────────────────────────────────────────────────────────
 .vscode/
 .idea/
+*.iml
 .DS_Store
+Thumbs.db

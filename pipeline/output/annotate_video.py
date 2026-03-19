@@ -12,15 +12,20 @@ import cv2
 import pandas as pd
 
 # ── Config ────────────────────────────────────────────────────────────────────
-CSV_FILE   = 'TrackNetV3/output/badminton_ball.csv'
-VIDEO_FILE = 'assets/badminton.mp4'
-OUT_FILE   = 'TrackNetV3/output/badminton_tracked.mp4'
-TRAIL_LEN    = 8       # how many past positions to draw as trail
-BALL_RADIUS  = 8       # radius of the current ball dot
-TRAIL_RADIUS = 5       # radius of trail dots
-BALL_COLOR   = (0, 0, 255)    # red   (BGR)
-TRAIL_COLOR  = (0, 255, 255)  # yellow (BGR)
+from pathlib import Path
+
+ROOT         = Path(__file__).resolve().parents[2]
+CSV_FILE     = ROOT / 'TrackNetV3' / 'output' / 'badminton_ball.csv'
+VIDEO_FILE   = ROOT / 'assets' / 'badminton.mp4'
+OUT_FILE     = ROOT / 'data' / 'output' / 'badminton_tracked.mp4'
+
+TRAIL_LEN    = 8
+BALL_RADIUS  = 8
+TRAIL_RADIUS = 5
+BALL_COLOR   = (0, 0, 255)
+TRAIL_COLOR  = (0, 255, 255)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def main():
     df = pd.read_csv(CSV_FILE)
@@ -71,8 +76,8 @@ def main():
 
     cap.release()
     out.release()
-    print(f'\nDone! Output saved to: {OUT_FILE}')
-    print(f'Total frames written: {frame_idx}')
+    print(f'\n✅ Done! Output saved to: {OUT_FILE}')
+    print(f'   Total frames written: {frame_idx}')
 
 
 if __name__ == '__main__':

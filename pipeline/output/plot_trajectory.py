@@ -10,21 +10,24 @@ Usage:
 
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 import numpy as np
 
 # ── Config ────────────────────────────────────────────────────────────────────
-CSV_FILE = 'TrackNetV3/output/badminton_ball.csv'
-OUT_FILE = 'TrackNetV3/output/trajectory.png'
+from pathlib import Path
+
+ROOT     = Path(__file__).resolve().parents[2]
+CSV_FILE = ROOT / 'TrackNetV3' / 'output' / 'badminton_ball.csv'
+OUT_FILE = ROOT / 'data' / 'output' / 'trajectory.png'
 DPI      = 150
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def main():
     df = pd.read_csv(CSV_FILE)
 
-    total_frames  = len(df)
-    visible       = df[df['Visibility'] == 1]
-    invisible     = df[df['Visibility'] == 0]
+    total_frames   = len(df)
+    visible        = df[df['Visibility'] == 1]
+    invisible      = df[df['Visibility'] == 0]
     visibility_pct = 100 * len(visible) / total_frames
 
     print(f'Total frames  : {total_frames}')
@@ -51,7 +54,6 @@ def main():
     ax.set_xlabel('X position (pixels)')
     ax.set_ylabel('Y position (pixels)')
 
-    # Stats annotation
     stats_text = (
         f'Frames: {total_frames}\n'
         f'Visible: {visibility_pct:.1f}%\n'
@@ -66,7 +68,7 @@ def main():
 
     plt.tight_layout()
     plt.savefig(OUT_FILE, dpi=DPI, bbox_inches='tight')
-    print(f'\nSaved to: {OUT_FILE}')
+    print(f'\n✅ Saved to: {OUT_FILE}')
 
 
 if __name__ == '__main__':
