@@ -1,0 +1,17 @@
+COURTSENSE AI: FULL ANALYTICS REPORT
+====================================
+
+SHOT LOG:
+[Frame 6] Player 1: LOB/LIFT (FRONT FOREHAND -> BACK FOREHAND)
+
+👤 PLAYER 1 stats:
+   📏 Total Run: 33.47 m
+   🎾 BACK-FH: 21.5% | BACK-BH: 20.9%
+   🎾 FRNT-FH: 42.4% | FRNT-BH: 15.3%
+---------------------------
+
+👤 PLAYER 2 stats:
+   📏 Total Run: 23.67 m
+   🎾 BACK-FH: 21.5% | BACK-BH: 62.9%
+   🎾 FRNT-FH: 10.1% | FRNT-BH: 5.4%
+---------------------------

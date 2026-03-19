@@ -1,0 +1,32 @@
+# 1. Virtual Environments
+venv_stable/
+venv/
+.env
+
+# 2. Python Artifacts
+__pycache__/
+*.pyc
+
+# 3. Heavy AI Weights & Models (GitHub Limit is 100MB)
+*.pt
+TrackNetV3/ckpts/
+yolo26n-pose_openvino_model/
+
+# 4. Large Media & Assets
+assets/*.mp4
+assets/*.avi
+assets/*.mov
+
+# 5. Generated Outputs & Data
+TrackNetV3/output/
+rally_data.csv
+*.png
+
+# 6. Java / Maven (Analyzer Backend)
+analyzer/target/
+*.class
+
+# 7. IDE & OS Files
+.vscode/
+.idea/
+.DS_Store
