@@ -235,7 +235,7 @@ Gemini Flash receives this alongside a coaching prompt and returns specific tact
 | Purpose | Tool |
 | --- | --- |
 | IDE | Visual Studio Code |
-| API Testing | Postman |
+| API Testing | - |
 | Version Control | Git + GitHub |
 | Build Tool | Maven |
 
