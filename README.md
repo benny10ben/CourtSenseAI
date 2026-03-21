@@ -31,10 +31,10 @@ Video Input
     Python Pipeline             → Processing, analysis, JSON output
             │
             ▼
-    Spring Boot Backend         → REST API, user management, Gemini integration
+    Spring Boot Backend         → REST API, database, Gemini integration
             │
             ▼
-    Frontend                    → Match dashboard, coaching insights UI
+        Frontend                → Match dashboard, coaching insights UI
 ```
 
 ---
@@ -53,15 +53,17 @@ CourtSenseAI/
 │   │   ├── detect_shots.py          # Hit detection + player attribution
 │   │   ├── footprint_zones.py       # Court zone drawing + time analysis (interactive)
 │   │   ├── test_heatmap.py          # Player reach heatmap generation
-│   │   └── build_coaching_payload.py # Build coaching_payload.json for Gemini
+│   │   └── build_coaching_payload.py
 │   ├── output/
 │   │   ├── annotate_video.py        # Draw ball trail on original video
 │   │   ├── plot_trajectory.py       # 2D shuttlecock trajectory plot
 │   │   └── verify_master.py         # QA — draw skeleton + ball on video
 │   └── run_pipeline.py              # Single automated entry point
 │
-├── backend/                         # Spring Boot (in progress)
-│   └── src/
+├── backend/                         # Spring Boot backend
+│   ├── src/
+│   ├── pom.xml
+│   └── .env                         # Hidden environment variables (not committed)
 │
 ├── data/
 │   ├── input/                       # Uploaded videos (future)
@@ -70,64 +72,8 @@ CourtSenseAI/
 │
 ├── models/                          # ML model weights
 ├── assets/                          # Source videos
-├── TrackNetV3/                      # Third-party ball tracking repo
-└── .env
+└── TrackNetV3/                      # Third-party ball tracking repo
 ```
-
----
-
-## Pipeline Flow
-
-### Step 1 — Ball Tracking
-Run TrackNetV3 to track the shuttlecock. This produces `badminton_ball.csv` with frame-by-frame X, Y, visibility.
-
-```bash
-CUDA_VISIBLE_DEVICES="" python TrackNetV3/predict.py \
-  --video_file assets/badminton.mp4 \
-  --tracknet_file TrackNetV3/ckpts/TrackNet_best.pt \
-  --inpaintnet_file TrackNetV3/ckpts/InpaintNet_best.pt \
-  --save_dir TrackNetV3/output \
-  --batch_size 4
-```
-
-### Step 2 — Player Pose Extraction *(interactive)*
-Opens a window. Click 4 court corners to define the court boundary. YOLOv8-Pose then tracks both players through every frame.
-
-```bash
-python pipeline/processing/extract_pose.py
-```
-
-### Step 3 — Smooth Player IDs
-YOLO sometimes swaps player IDs. This corrects them, assigns P1 = far court, P2 = near court, and interpolates any missing frames.
-
-```bash
-python pipeline/processing/smooth_ids.py
-```
-
-### Step 4 — Court Zone Drawing *(interactive)*
-Opens a window. Draw 4 zone boxes for each player (Front-Left, Front-Right, Back-Left, Back-Right). Automatically analyses how much time each player spent in each zone.
-
-```bash
-python pipeline/analysis/footprint_zones.py
-```
-
-### Step 5 — Run Automated Pipeline
-Everything else runs automatically in the correct order.
-
-```bash
-# Core analysis only
-python pipeline/run_pipeline.py
-
-# Core + annotated videos + trajectory plots
-python pipeline/run_pipeline.py --full
-```
-
-The automated pipeline runs:
-1. `smooth_ids.py` → clean player IDs
-2. `merge_data.py` → fuse all data into `rally_master.csv`
-3. `detect_shots.py` → detect hits, attribute to players
-4. `test_heatmap.py` → generate reach heatmaps
-5. `build_coaching_payload.py` → produce `coaching_payload.json`
 
 ---
 
@@ -167,37 +113,6 @@ All outputs land in `data/output/`. Nothing is committed to git.
 
 ---
 
-## Coaching Payload
-
-The final output of the pipeline is a compact JSON sent to Gemini for coaching analysis:
-
-```json
-{
-  "match_summary": {
-    "duration_seconds": 21.0,
-    "total_shots": 22,
-    "total_rallies": 1,
-    "avg_rally_length_seconds": 21.0
-  },
-  "speed_comparison": {
-    "harder_hitter": "player_1",
-    "speed_ratio_p1_vs_p2": 2.38
-  },
-  "player_1": {
-    "court_side": "far",
-    "hits": { "count": 11, "avg_speed_pxpf": 69.6 },
-    "zones": { "back_right_pct": 38.0, "most_occupied_zone": "Back-Right" },
-    "home_position": "right side, mid-court",
-    "coverage": { "horizontal": "wide (97%)", "vertical": "narrow (35%)" }
-  },
-  "player_2": { ... }
-}
-```
-
-Gemini Flash receives this alongside a coaching prompt and returns specific tactical insights for each player.
-
----
-
 ## Tech Stack
 
 **🐍 Python Pipeline**
@@ -216,19 +131,16 @@ Gemini Flash receives this alongside a coaching prompt and returns specific tact
 | Purpose | Library / Tool |
 | --- | --- |
 | REST API | Spring Boot 3 |
-| Authentication | Spring Security + JWT |
 | Database ORM | Spring Data JPA + Hibernate |
 | Database | PostgreSQL |
-| Async job processing | Spring @Async + ExecutorService |
+| HTTPS Client | Spring WebFlux (WebClient) |
 | AI Integration | Google Gemini Flash API |
 
 **🌐 Frontend** *(Phase 3)*
 
 | Purpose | Library / Tool |
 | --- | --- |
-| UI Framework | - |
-| Styling | - |
-| Charts & Heatmaps | - |
+| TBD | React / Next.js / Android (Kotlin) |
 
 **🛠️ Dev Tools**
 
@@ -241,52 +153,20 @@ Gemini Flash receives this alongside a coaching prompt and returns specific tact
 
 ---
 
-## Roadmap
+## Setup, Installation & Execution
 
-### ✅ Phase 1 — Python Pipeline
-- [x] Shuttlecock tracking via TrackNetV3
-- [x] Player pose extraction via YOLOv8-Pose
-- [x] Player ID smoothing and interpolation
-- [x] Shot detection with player attribution
-- [x] Interactive court zone calibration
-- [x] Player reach heatmap generation
-- [x] Coaching payload JSON builder
-- [x] Automated pipeline runner
+Follow these steps to set up the full stack on your local machine and run your first match analysis.
 
-### 🔄 Phase 2 — Spring Boot Backend *(in progress)*
-- [ ] Project setup and database schema
-- [ ] Video upload endpoint
-- [ ] Async pipeline job trigger and status tracking
-- [ ] REST API for match results and stats
-- [ ] Gemini Flash integration — coaching insights per match
-- [ ] User authentication via Spring Security
-- [ ] Match history per user
+### 1. Clone the Repository
 
-### 📋 Phase 3 — Frontend
-- [ ] Match upload and processing status page
-- [ ] Match dashboard — stats, heatmaps, shot log
-- [ ] Coaching insights panel — Gemini AI feedback
-- [ ] Player comparison view
-- [ ] Historical match comparison
+```bash
+git clone https://github.com/benny10ben/CourtSenseAI.git
+cd CourtSenseAI
+```
 
-### 💡 Phase 4 — Future Improvements
-- [ ] Multi-match trend analysis across sessions
-- [ ] Doubles match support (4 players)
-- [ ] Accurate speed calibration using court reference points
-- [ ] Shot type classification (smash, drop, clear, drive)
-- [ ] Overhead detection using wrist-shoulder relationship
+### 2. Python Environment Setup
 
----
-
-## Setup
-
-### Prerequisites
-- Python 3.11+
-- Java 21+
-- Maven 3.9+
-- PostgreSQL (for Phase 2)
-
-### Python Environment
+Ensure you have Python 3.11+ installed.
 
 ```bash
 python -m venv venv_stable
@@ -294,20 +174,124 @@ source venv_stable/bin/activate
 pip install ultralytics opencv-python pandas numpy matplotlib scipy
 ```
 
-### Model Weights
-Download and place in `models/`:
-- `yolo26n-pose.pt` — auto-downloads on first run via Ultralytics
-- `TrackNet_best.pt` and `InpaintNet_best.pt` — see TrackNetV3 repo for download instructions, place in `TrackNetV3/ckpts/`
+> Download TrackNetV3 weights and place them in `TrackNetV3/ckpts/`. The `yolo26n-pose.pt` model will auto-download on first run.
 
-### Environment Variables
-Create a `.env` file at the project root:
+### 3. PostgreSQL Setup (Linux / Fedora)
+
+The Spring Boot backend requires a PostgreSQL database to store match data and AI insights.
+
+**Install and initialize:**
+
+```bash
+sudo dnf install postgresql-server postgresql-contrib
+sudo postgresql-setup --initdb
+sudo systemctl enable --now postgresql
+```
+
+**Create the database and user:**
+
+```bash
+sudo -i -u postgres psql
+```
+
+Run inside the psql shell:
+
+```sql
+CREATE DATABASE courtsense;
+CREATE USER username WITH PASSWORD 'password';
+GRANT ALL PRIVILEGES ON DATABASE courtsense TO courtsense_admin;
+\q
+```
+
+> You do not need to manually create tables. Spring Boot Hibernate auto-generates the schema on startup.
+
+### 4. Backend Configuration
+
+Navigate to the `backend/` directory and create a `.env` file:
+
+```bash
+cd backend
+touch .env
+```
+
+Add the following — this file is gitignored and never committed:
 
 ```
-GEMINI_API_KEY=your_key_here
 DB_URL=jdbc:postgresql://localhost:5432/courtsense
-DB_USERNAME=your_db_user
-DB_PASSWORD=your_db_password
+DB_USERNAME=username
+DB_PASSWORD=password
+
+GEMINI_API_KEY=your_actual_gemini_api_key_here
+GEMINI_API_URL=https://generativelanguage.googleapis.com/...
+
+INTERNAL_SECRET_KEY=your_custom_secret_password_here
 ```
+
+Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com/).
+
+### 5. Start the Spring Boot Backend
+
+Ensure you have Java 21+ and Maven installed. From the `backend/` directory:
+
+```bash
+mvn clean spring-boot:run
+```
+
+The server starts on `http://localhost:8080`.
+
+### 6. Run the Python Data Pipeline
+
+Open a new terminal, activate `venv_stable`, and run from the project root in order.
+
+**Step 6a — Ball Tracking**
+
+```bash
+CUDA_VISIBLE_DEVICES="" python TrackNetV3/predict.py \
+  --video_file assets/badminton.mp4 \
+  --tracknet_file TrackNetV3/ckpts/TrackNet_best.pt \
+  --inpaintnet_file TrackNetV3/ckpts/InpaintNet_best.pt \
+  --save_dir TrackNetV3/output \
+  --batch_size 4
+```
+
+**Step 6b — Player Pose Extraction** *(interactive — click 4 court corners)*
+
+```bash
+python pipeline/processing/extract_pose.py
+```
+
+**Step 6c — Smooth Player IDs**
+
+```bash
+python pipeline/processing/smooth_ids.py
+```
+
+**Step 6d — Court Zone Drawing** *(interactive — draw 4 zones per player)*
+
+```bash
+python pipeline/analysis/footprint_zones.py
+```
+
+**Step 6e — Run Automated Analysis**
+
+```bash
+# Core analysis only
+python pipeline/run_pipeline.py
+
+# Core + annotated QA videos + trajectory plots
+python pipeline/run_pipeline.py --full
+```
+
+### 7. Trigger the AI Coaching API
+
+With `coaching_payload.json` generated and Spring Boot running:
+
+```bash
+curl -X POST http://localhost:8080/api/matches/process-latest \
+     -H "X-Internal-Secret: your_custom_secret_password_here"
+```
+
+The backend parses the Python output, requests tactical advice from Gemini, and saves the full match report to PostgreSQL.
 
 ---
 
@@ -330,6 +314,36 @@ Built and tested on the following machine:
 | IDE | Visual Studio Code |
 
 > All pipeline scripts run on CPU. No GPU required — TrackNetV3 runs with `CUDA_VISIBLE_DEVICES=""` and YOLOv8 uses `device='cpu'`. Expect ~2–5 minutes processing time per minute of video on this hardware.
+
+---
+
+## Roadmap
+
+### ✅ Phase 1 — Python Pipeline
+- [x] Shuttlecock tracking via TrackNetV3
+- [x] Player pose extraction via YOLOv8-Pose
+- [x] Player ID smoothing and interpolation
+- [x] Shot detection with player attribution
+- [x] Interactive court zone calibration
+- [x] Player reach heatmap generation
+- [x] Coaching payload JSON builder
+- [x] Automated pipeline runner
+
+### 🔄 Phase 2 — Spring Boot Backend *(in progress)*
+- [x] Project setup and database schema
+- [x] Data parsing from Python output
+- [x] Security gatekeeper and endpoint protection
+- [x] Gemini Flash AI integration
+- [ ] Video upload endpoint
+- [ ] Async pipeline job trigger
+- [ ] User authentication via Spring Security
+- [ ] Match history per user
+
+### 📋 Phase 3 — Frontend
+- [ ] Match upload and processing status page
+- [ ] Match dashboard — stats, heatmaps, shot log
+- [ ] Coaching insights panel — Gemini AI feedback
+- [ ] Player comparison view
 
 ---
 
