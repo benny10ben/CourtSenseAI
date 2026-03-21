@@ -46,7 +46,6 @@ public class MatchController {
         }
 
         // Relative path from the backend folder to your data output
-        String path = "../data/output/coaching_payload.json";
         Match savedMatch = matchService.processPythonOutput(payloadPath, videoName);
 
         return ResponseEntity.ok(savedMatch);
