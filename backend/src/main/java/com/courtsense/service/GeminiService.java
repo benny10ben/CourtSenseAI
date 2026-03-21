@@ -18,26 +18,24 @@ public class GeminiService {
 
     private final WebClient webClient = WebClient.builder().build();
 
+    @SuppressWarnings("unchecked")
     public String getLiveCoaching(Match match) {
         String prompt = buildCoachingPrompt(match);
-
         try {
-            // Making the call with the Key in the HEADER (x-goog-api-key)
             Map<String, Object> response = webClient.post()
                 .uri(apiUrl)
-                .header("x-goog-api-key", apiKey) 
+                .header("x-goog-api-key", apiKey)
                 .bodyValue(Map.of("contents", List.of(Map.of("parts", List.of(Map.of("text", prompt))))))
                 .retrieve()
                 .bodyToMono(Map.class)
                 .block();
 
-            // Extracting the AI's response text
-            List candidates = (List) response.get("candidates");
-            Map candidate = (Map) candidates.get(0);
-            Map content = (Map) candidate.get("content");
-            List parts = (List) content.get("parts");
-            Map part = (Map) parts.get(0);
-            
+            List<Object> candidates = (List<Object>) response.get("candidates");
+            Map<String, Object> candidate = (Map<String, Object>) candidates.get(0);
+            Map<String, Object> content = (Map<String, Object>) candidate.get("content");
+            List<Object> parts = (List<Object>) content.get("parts");
+            Map<String, Object> part = (Map<String, Object>) parts.get(0);
+
             return (String) part.get("text");
 
         } catch (Exception e) {
