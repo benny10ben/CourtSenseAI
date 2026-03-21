@@ -7,9 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class CourtSenseApplication {
 
     public static void main(String[] args) {
-        var context = SpringApplication.run(CourtSenseApplication.class, args);
-        // String dbUrl = context.getEnvironment().getProperty("DB_URL");
-        // System.out.println("DEBUG: Spring sees DB_URL as: " + dbUrl);
+        SpringApplication.run(CourtSenseApplication.class, args);
     }
 
 }
