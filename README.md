@@ -2,7 +2,9 @@
 
 > **AI-powered badminton match analysis. Computer vision meets coaching intelligence.**
 
-CourtSenseAI turns a raw match video into deep tactical insights — tracking the shuttlecock, reading player movement, detecting every hit, and ultimately generating AI coaching feedback via Gemini. Built as a full-stack learning project combining computer vision, ML inference, data engineering, and Spring Boot.
+CourtSenseAI turns a raw match video into deep tactical insights — tracking the shuttlecock, reading player movement, detecting every hit, and generating AI coaching feedback via Gemini. Built as a full-stack learning project combining computer vision, ML inference, data engineering, and Spring Boot.
+
+Coming in Phase 4: **CourtSenseAI Scout** — a RAG-powered intelligence layer that connects your match patterns to a knowledge base of professional badminton coaching literature, player analysis, and tactical guides. Where CourtSenseAI tells you *what happened* in your match, Scout tells you *what it means*.
 
 ---
 
@@ -15,11 +17,19 @@ Upload a badminton match video. CourtSenseAI will:
 - **Detect every shot** — speed, position, and which player hit it
 - **Map court zones** — how much time each player spends in each corner
 - **Generate heatmaps** — where players move to hit shots
-- **Build a coaching payload** — clean JSON summarising the match, ready for Gemini AI
+- **Build a coaching payload** — clean JSON summarising the match, ready for AI analysis
+
+And with **Scout** *(coming Phase 4)*:
+
+- **Generate retrieval queries** automatically from your match statistics — no user input needed
+- **Search a knowledge base** of professional coaching literature, BWF documents, and player tactical breakdowns using semantic search
+- **Produce a structured scouting report** — specific insights grounded in retrieved expert knowledge, with every insight traceable to a source document
 
 ---
 
 ## Architecture
+
+### CourtSenseAI
 
 ```
 Video Input
@@ -35,6 +45,32 @@ Video Input
             │
             ▼
         Frontend                → Match dashboard, coaching insights UI
+```
+
+### CourtSenseAI Scout *(Phase 4)*
+
+```
+coaching_payload.json
+        │
+        ▼
+Scout Query Builder
+(converts match stats into retrieval queries)
+        │
+        ▼
+Vector Knowledge Base
+(semantic search over indexed coaching documents)
+        │
+        ▼
+Retrieved Chunks
+(top relevant passages per query)
+        │
+        ▼
+LLM Synthesis
+(combines chunks + match data into structured report)
+        │
+        ▼
+Structured Scouting Report
+(served via Spring Boot API to frontend)
 ```
 
 ---
@@ -58,6 +94,8 @@ CourtSenseAI/
 │   │   ├── annotate_video.py        # Draw ball trail on original video
 │   │   ├── plot_trajectory.py       # 2D shuttlecock trajectory plot
 │   │   └── verify_master.py         # QA — draw skeleton + ball on video
+│   ├── scout/                       # Scout knowledge base pipeline (Phase 4)
+│   │   └── ...                      # Scrape → chunk → embed → store
 │   └── run_pipeline.py              # Single automated entry point
 │
 ├── backend/                         # Spring Boot backend
@@ -68,6 +106,8 @@ CourtSenseAI/
 ├── data/
 │   ├── input/                       # Uploaded videos (future)
 │   ├── output/                      # All pipeline outputs
+│   ├── scout/                       # Scout knowledge base data (Phase 4)
+│   │   └── raw/                     # Scraped coaching documents
 │   └── temp/
 │
 ├── models/                          # ML model weights
@@ -109,7 +149,7 @@ All outputs land in `data/output/`. Nothing is committed to git.
 
 | File | Description |
 | --- | --- |
-| `coaching_payload.json` | Clean match summary JSON — the only file sent to Gemini |
+| `coaching_payload.json` | Clean match summary JSON — the input to Gemini and to Scout |
 
 ---
 
@@ -141,6 +181,16 @@ All outputs land in `data/output/`. Nothing is committed to git.
 | Purpose | Library / Tool |
 | --- | --- |
 | TBD | React / Next.js / Android (Kotlin) |
+
+**🔍 Scout — RAG Intelligence Layer** *(Phase 4 — will be built soon)*
+
+| Purpose | Library / Tool |
+| --- | --- |
+| Knowledge base & retrieval | Will be built soon |
+| Embedding model | Will be built soon |
+| Vector database | Will be built soon |
+| Query engine | Will be built soon |
+| Report synthesis | Will be built soon |
 
 **🛠️ Dev Tools**
 
@@ -344,6 +394,16 @@ Built and tested on the following machine:
 - [ ] Match dashboard — stats, heatmaps, shot log
 - [ ] Coaching insights panel — Gemini AI feedback
 - [ ] Player comparison view
+
+### 🔍 Phase 4 — CourtSenseAI Scout *(coming soon)*
+Scout is a RAG-powered intelligence layer built on top of CourtSenseAI. It reads `coaching_payload.json` and automatically generates retrieval queries from your match statistics — no user input needed. Those queries search a knowledge base of professional coaching literature, BWF technical documents, and player tactical breakdowns. The result is a structured scouting report where every insight is grounded in and traceable to a specific expert source.
+
+- [ ] Knowledge base construction — scraping, chunking, embedding, and indexing coaching documents
+- [ ] Query engine — programmatic query generation from match statistics
+- [ ] Semantic retrieval — vector similarity search over the knowledge base
+- [ ] Structured report generation — match data + retrieved knowledge → scouting report
+- [ ] Spring Boot integration — new Scout endpoints added to existing backend
+- [ ] Sources panel in frontend — every insight linked to the expert document behind it
 
 ---
 
