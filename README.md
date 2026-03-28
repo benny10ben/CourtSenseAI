@@ -379,7 +379,7 @@ Built and tested on the following machine:
 - [x] Coaching payload JSON builder
 - [x] Automated pipeline runner
 
-### 🔄 Phase 2 — Spring Boot Backend *(in progress)*
+### 🔄 Phase 2 — Spring Boot Backend *(MVP Complete)*
 - [x] Project setup and database schema
 - [x] Data parsing from Python output
 - [x] Security gatekeeper and endpoint protection
@@ -389,10 +389,11 @@ Built and tested on the following machine:
 - [ ] User authentication via Spring Security
 - [ ] Match history per user
 
-### 📋 Phase 3 — Frontend
+### 🔄 Phase 3 — Next.js Frontend *(In Progress)*
+- [x] Monorepo setup and Tailwind styling
+- [x] Read-only match dashboard and Gemini insight UI
 - [ ] Match upload and processing status page
-- [ ] Match dashboard — stats, heatmaps, shot log
-- [ ] Coaching insights panel — Gemini AI feedback
+- [ ] Data visualization (Court heatmaps and charts)
 - [ ] Player comparison view
 
 ### 🔍 Phase 4 — CourtSenseAI Scout *(coming soon)*
@@ -412,5 +413,3 @@ Scout is a RAG-powered intelligence layer built on top of CourtSenseAI. It reads
 - [TrackNetV3](https://github.com/alenzenx/TrackNetV3) — shuttlecock tracking model
 - [Ultralytics YOLOv8](https://github.com/ultralytics/ultralytics) — pose estimation
 - [ByteTrack](https://github.com/ifzhang/ByteTrack) — multi-object tracking
-
----
