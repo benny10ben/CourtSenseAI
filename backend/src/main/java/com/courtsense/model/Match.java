@@ -11,31 +11,45 @@ public class Match {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // ── NEW: ties this match to a browser session ──────────────────────────
+    @Column(nullable = false)
+    private String sessionId;
+    // ───────────────────────────────────────────────────────────────────────
+
     private String videoFilename;
     private Integer totalShots;
     private Double durationSeconds;
     private Integer totalRallies;
 
+    private String jobId;
+    private String status;
+
     private Double avgRallyLengthSeconds;
     private String harderHitter;
-    
-    @Column(columnDefinition = "TEXT")
-    private String geminiInsight; // Where the AI coaching feedback will live
 
-    // Add this with your other variables in Match.java
+    @Column(columnDefinition = "TEXT")
+    private String geminiInsight;
+
     @Column(columnDefinition = "TEXT")
     private String rawJsonPayload;
 
+    private String heatmapUrl;
+
     private LocalDateTime createdAt;
 
-    // Default Constructor
     public Match() {
         this.createdAt = LocalDateTime.now();
     }
 
     // --- Getters and Setters ---
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
+
+    // ── NEW ────────────────────────────────────────────────────────────────
+    public String getSessionId() { return sessionId; }
+    public void setSessionId(String sessionId) { this.sessionId = sessionId; }
+    // ───────────────────────────────────────────────────────────────────────
 
     public String getVideoFilename() { return videoFilename; }
     public void setVideoFilename(String videoFilename) { this.videoFilename = videoFilename; }
@@ -63,4 +77,13 @@ public class Match {
 
     public String getRawJsonPayload() { return rawJsonPayload; }
     public void setRawJsonPayload(String rawJsonPayload) { this.rawJsonPayload = rawJsonPayload; }
+
+    public String getHeatmapUrl() { return heatmapUrl; }
+    public void setHeatmapUrl(String heatmapUrl) { this.heatmapUrl = heatmapUrl; }
+
+    public String getJobId() { return jobId; }
+    public void setJobId(String jobId) { this.jobId = jobId; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 }
