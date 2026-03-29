@@ -36,9 +36,11 @@ TrackNetV3/output/*
 data/output/*
 data/input/*
 data/temp/*
+data/sessions/*
 !data/output/.gitkeep
 !data/input/.gitkeep
 !data/temp/.gitkeep
+!data/sessions/.gitkeep
 
 # ── Java / Maven ──────────────────────────────────────────────────────────────
 backend/target/

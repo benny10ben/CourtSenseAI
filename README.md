@@ -2,24 +2,25 @@
 
 > **AI-powered badminton match analysis. Computer vision meets coaching intelligence.**
 
-CourtSenseAI turns a raw match video into deep tactical insights — tracking the shuttlecock, reading player movement, detecting every hit, and generating AI coaching feedback via Gemini. Built as a full-stack learning project combining computer vision, ML inference, data engineering, and Spring Boot.
+CourtSenseAI turns a raw match video into deep tactical insights — tracking the shuttlecock, reading player movement, detecting every hit, and generating AI coaching feedback via Gemini. Built as a production-grade, multi-tenant full-stack application combining computer vision, ML inference, a Spring Boot Java backend, and a modern Next.js frontend.
 
-Coming in Phase 4: **CourtSenseAI Scout** — a RAG-powered intelligence layer that connects your match patterns to a knowledge base of professional badminton coaching literature, player analysis, and tactical guides. Where CourtSenseAI tells you *what happened* in your match, Scout tells you *what it means*.
+Coming in Phase 5: **CourtSenseAI Scout** — a RAG-powered intelligence layer that connects your match patterns to a knowledge base of professional badminton coaching literature, player analysis, and tactical guides. Where CourtSenseAI tells you *what happened* in your match, Scout tells you *what it means*.
 
 ---
 
 ## What It Does
 
-Upload a badminton match video. CourtSenseAI will:
+Upload a badminton match video via the web dashboard. CourtSenseAI will:
 
 - **Track the shuttlecock** frame-by-frame using TrackNetV3
 - **Track both players** with YOLOv8-Pose, extracting 17 body keypoints per frame
 - **Detect every shot** — speed, position, and which player hit it
 - **Map court zones** — how much time each player spends in each corner
 - **Generate heatmaps** — where players move to hit shots
-- **Build a coaching payload** — clean JSON summarising the match, ready for AI analysis
+- **Build a coaching payload** — clean JSON summarising the match
+- **Generate Tactical Insights** — Uses Google Gemini to analyze the payload and provide personalized coaching feedback
 
-And with **Scout** *(coming Phase 4)*:
+And with **Scout** *(coming Phase 5)*:
 
 - **Generate retrieval queries** automatically from your match statistics — no user input needed
 - **Search a knowledge base** of professional coaching literature, BWF documents, and player tactical breakdowns using semantic search
@@ -27,51 +28,61 @@ And with **Scout** *(coming Phase 4)*:
 
 ---
 
-## Architecture
+## Architecture (Multi-Tenant Session Isolated)
 
-### CourtSenseAI
+CourtSenseAI is designed to handle multiple concurrent users without data collision. Every browser session gets its own isolated directory for video processing.
 
 ```
-Video Input
-    │
+Next.js Frontend (Web UI)
+    │   (Uploads video + Court/Zone coordinates via Canvas)
+    ▼
+Spring Boot Backend (REST API)
+    │   (Creates isolated session folder, saves DB row as PROCESSING)
+    │   (Fires Async Background Thread — or RabbitMQ Worker in Phase 4)
+    ▼
+Python Pipeline (run_pipeline.py --session-dir)
     ├── TrackNetV3              → Shuttlecock tracking (ball CSV)
-    └── YOLOv8-Pose             → Player pose tracking (keypoints CSV)
-            │
-            ▼
-    Python Pipeline             → Processing, analysis, JSON output
-            │
-            ▼
-    Spring Boot Backend         → REST API, database, Gemini integration
-            │
-            ▼
-        Frontend                → Match dashboard, coaching insights UI
+    ├── YOLOv8-Pose             → Player pose tracking (keypoints CSV)
+    └── Analysis Scripts        → Detects shots, builds heatmaps, generates JSON
+    │
+    ▼
+Spring Boot Backend
+    │   (Reads JSON, triggers Gemini Flash API for coaching insight)
+    │   (Updates DB row to COMPLETED)
+    ▼
+Next.js Frontend
+    (Polls /status/{jobId}, renders Glassmorphism Dashboard)
 ```
 
-### CourtSenseAI Scout *(Phase 4)*
+---
 
-```
-coaching_payload.json
-        │
-        ▼
-Scout Query Builder
-(converts match stats into retrieval queries)
-        │
-        ▼
-Vector Knowledge Base
-(semantic search over indexed coaching documents)
-        │
-        ▼
-Retrieved Chunks
-(top relevant passages per query)
-        │
-        ▼
-LLM Synthesis
-(combines chunks + match data into structured report)
-        │
-        ▼
-Structured Scouting Report
-(served via Spring Boot API to frontend)
-```
+## Architectural Justifications
+
+This section explains the key decisions behind CourtSenseAI.
+
+### 1. Polyglot Architecture — Java + Python
+
+CourtSenseAI uses two languages, each for what it does best.
+
+**Spring Boot handles the core logic.** Java provides type safety, clean API design, and reliable session handling. With tools like JPA and `CompletableFuture`, we can manage data and async tasks effectively while catching critical bugs early.
+
+**Python handles ML.** Libraries like TrackNetV3, YOLOv8, OpenCV, and NumPy make Python the natural choice for computer vision. Rebuilding that in Java isn’t practical, so Python runs as a worker process — Java triggers it, passes data, and reads results.
+
+This separation keeps things flexible. We can update ML models without touching Java, and vice versa.
+
+
+### 2. Session Isolation — UUID Instead of Auth (temporary - only for now)
+
+Instead of a full auth system, we use **UUID-based anonymous sessions**.
+
+On first visit, the backend assigns a UUID cookie. All uploads, outputs, and DB rows are tied to that session and stored in its own folder.
+
+This gives us:
+- **No data clashes** between users  
+- **Simple reset behavior** (new upload clears old session data)  
+- **No auth overhead**, with an easy upgrade path later  
+
+The trade-off is that sessions are browser-based, so clearing cookies resets everything — which is acceptable for this use case.
 
 ---
 
@@ -80,167 +91,103 @@ Structured Scouting Report
 ```
 CourtSenseAI/
 │
-├── pipeline/                        # All Python processing
-│   ├── processing/
-│   │   ├── extract_pose.py          # YOLOv8 player tracking (interactive)
-│   │   ├── smooth_ids.py            # Fix player ID swaps, interpolate gaps
-│   │   └── merge_data.py            # Fuse ball + player → rally_master.csv
-│   ├── analysis/
-│   │   ├── detect_shots.py          # Hit detection + player attribution
-│   │   ├── footprint_zones.py       # Court zone drawing + time analysis (interactive)
-│   │   ├── test_heatmap.py          # Player reach heatmap generation
-│   │   └── build_coaching_payload.py
-│   ├── output/
-│   │   ├── annotate_video.py        # Draw ball trail on original video
-│   │   ├── plot_trajectory.py       # 2D shuttlecock trajectory plot
-│   │   └── verify_master.py         # QA — draw skeleton + ball on video
-│   ├── scout/                       # Scout knowledge base pipeline (Phase 4)
-│   │   └── ...                      # Scrape → chunk → embed → store
-│   └── run_pipeline.py              # Single automated entry point
+├── frontend/                        # Next.js 15 App
+│   ├── src/app/page.tsx             # Glassmorphism Dark-Mode Dashboard
+│   └── src/components/Uploader.tsx  # Interactive Canvas for Court/Zone Calibration
 │
-├── backend/                         # Spring Boot backend
-│   ├── src/
-│   ├── pom.xml
-│   └── .env                         # Hidden environment variables (not committed)
+├── backend/                         # Spring Boot 3 Backend
+│   ├── src/main/java/com/courtsense/
+│   │   ├── config/                  # WebConfig (CORS, static media), future RabbitMQ config
+│   │   ├── controller/              # MatchController (upload, status, dashboard)
+│   │   ├── filter/                  # SessionFilter (UUID cookie stamped on every request)
+│   │   ├── model/                   # Match entity (sessionId, jobId, status, stats)
+│   │   ├── repository/              # MatchRepository (session-scoped JPA queries)
+│   │   └── service/                 # MatchService, FileStorageService, GeminiService
+│   └── .env                         # Environment variables (Gemini API key, DB creds)
+│
+├── pipeline/                        # Python Processing
+│   ├── processing/                  # extract_pose.py, smooth_ids.py, merge_data.py
+│   ├── analysis/                    # detect_shots.py, footprint_zones.py, test_heatmap.py,
+│   │                                # build_coaching_payload.py
+│   └── run_pipeline.py              # Master entry point — accepts --session-dir, --coords, --video
 │
 ├── data/
-│   ├── input/                       # Uploaded videos (future)
-│   ├── output/                      # All pipeline outputs
-│   ├── scout/                       # Scout knowledge base data (Phase 4)
-│   │   └── raw/                     # Scraped coaching documents
-│   └── temp/
+│   └── sessions/                    # 🔒 ISOLATED MULTI-TENANT DATA
+│       ├── {session-uuid-1}/        # User A's private workspace
+│       │   ├── input/               # Uploaded video + coords JSON (coords deleted post-run)
+│       │   ├── assets/              # Session-scoped working copy of badminton.mp4
+│       │   └── output/              # CSVs, player_heatmap.png → heatmap_{jobId}.png,
+│       │                            # coaching_payload.json
+│       └── {session-uuid-2}/        # User B's completely separate workspace
 │
-├── models/                          # ML model weights
-├── assets/                          # Source videos
-└── TrackNetV3/                      # Third-party ball tracking repo
+├── models/                          # ML model weights (YOLO)
+├── TrackNetV3/                      # Third-party shuttlecock tracking model
+└── scout/                           # 🔍 Phase 5 — CourtSenseAI Scout (Planned)
+    ├── knowledge_base/              # Chunked, embedded coaching literature and BWF documents
+    ├── retrieval/                   # Vector similarity search engine
+    ├── query_engine/                # Programmatic query generation from match statistics
+    └── report_builder/             # Match data + retrieved knowledge → structured scouting report
 ```
-
----
-
-## Outputs
-
-All outputs land in `data/output/`. Nothing is committed to git.
-
-**📊 Data Files**
-
-| File | Description |
-| --- | --- |
-| `rally_master.csv` | Master dataset — every frame with ball position + both players' full 17-keypoint pose |
-| `shots_detected.csv` | Every detected hit — frame, position, speed (px/frame), player attribution |
-| `rally_breaks.csv` | Detected gaps between rallies (50+ invisible frames) |
-| `court_zones.csv` | Zone box coordinates saved from interactive calibration |
-| `zone_footprint.csv` | Per-zone frame counts per player |
-
-**🖼️ Visuals**
-
-| File | Description |
-| --- | --- |
-| `player_heatmap.png` | 3-panel reach heatmap — P1, P2, and combined overlay on court |
-| `trajectory.png` | Full shuttlecock path coloured by frame number (purple → yellow) |
-
-**🎬 Videos** — generated with the `--full` flag
-
-| File | Description |
-| --- | --- |
-| `badminton_tracked.mp4` | Original video with red ball dot and yellow trail overlay |
-| `master_verification.mp4` | Original video with full skeleton, bounding boxes, and ball — used for QA |
-
-**🤖 AI Input**
-
-| File | Description |
-| --- | --- |
-| `coaching_payload.json` | Clean match summary JSON — the input to Gemini and to Scout |
 
 ---
 
 ## Tech Stack
 
+**🌐 Frontend**
+- **Framework**: Next.js 15 (App Router), React
+- **Styling**: Tailwind CSS, Glassmorphism design
+- **Interactivity**: HTML5 Canvas — interactive court corner marking + zone drag-to-draw
+- **Parsing**: React-Markdown for structured Gemini coaching output
+
+**☕ Backend**
+- **Framework**: Spring Boot 3
+- **Database**: PostgreSQL (Spring Data JPA + Hibernate, schema auto-managed)
+- **Session Management**: Custom `SessionFilter` — `httpOnly` UUID cookie, 30-day expiry
+- **Concurrency**: `CompletableFuture.runAsync()` — non-blocking Python subprocess execution
+- **AI Integration**: Google Gemini Flash API with exponential backoff retry (3 attempts: 2s → 4s → 8s)
+
 **🐍 Python Pipeline**
+- **Ball Tracking**: TrackNetV3 — deep learning shuttlecock trajectory model
+- **Player Tracking**: YOLOv8-Pose (Ultralytics) — 17-keypoint pose estimation
+- **Data Processing**: Pandas, NumPy, SciPy
+- **Visualisation**: Matplotlib, OpenCV
 
-| Purpose | Library / Tool |
-| --- | --- |
-| Shuttlecock tracking | TrackNetV3 |
-| Player pose estimation | YOLOv8-Pose (Ultralytics) |
-| Multi-object tracking | ByteTrack |
-| Data processing | Pandas, NumPy |
-| Computer vision | OpenCV |
-| Visualisation | Matplotlib, SciPy |
+**📦 Phase 4 — Planned Infrastructure**
+- **Message Queue**: RabbitMQ — async job queuing with backpressure and rate limiting
+- **Containerisation**: Docker + Docker Compose — reproducible multi-service deployments
+- **Observability**: Prometheus (metrics scraping) + Grafana (dashboards and alerting)
 
-**☕ Backend** *(Phase 2)*
-
-| Purpose | Library / Tool |
-| --- | --- |
-| REST API | Spring Boot 3 |
-| Database ORM | Spring Data JPA + Hibernate |
-| Database | PostgreSQL |
-| HTTPS Client | Spring WebFlux (WebClient) |
-| AI Integration | Google Gemini Flash API |
-
-**🌐 Frontend** *(Phase 3)*
-
-| Purpose | Library / Tool |
-| --- | --- |
-| TBD | React / Next.js / Android (Kotlin) |
-
-**🔍 Scout — RAG Intelligence Layer** *(Phase 4 — will be built soon)*
-
-| Purpose | Library / Tool |
-| --- | --- |
-| Knowledge base & retrieval | Will be built soon |
-| Embedding model | Will be built soon |
-| Vector database | Will be built soon |
-| Query engine | Will be built soon |
-| Report synthesis | Will be built soon |
-
-**🛠️ Dev Tools**
-
-| Purpose | Tool |
-| --- | --- |
-| IDE | Visual Studio Code |
-| API Testing | - |
-| Version Control | Git + GitHub |
-| Build Tool | Maven |
+**🔍 Phase 5 — Planned Intelligence**
+- **RAG Engine**: Vector similarity search over an embedded coaching knowledge base
+- **Query Engine**: Programmatic retrieval query generation from match statistics — no user prompt needed
+- **Report Builder**: Structured scouting reports grounded in retrieved expert documents, every insight source-traceable
 
 ---
 
 ## Setup, Installation & Execution
 
-Follow these steps to set up the full stack on your local machine and run your first match analysis.
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/benny10ben/CourtSenseAI.git
-cd CourtSenseAI
-```
-
-### 2. Python Environment Setup
+### 1. Clone the Repository & Python Setup
 
 Ensure you have Python 3.11+ installed.
 
 ```bash
+git clone https://github.com/benny10ben/CourtSenseAI.git
+cd CourtSenseAI
+
 python -m venv venv_stable
 source venv_stable/bin/activate
 pip install ultralytics opencv-python pandas numpy matplotlib scipy
 ```
 
-> Download TrackNetV3 weights and place them in `TrackNetV3/ckpts/`. The `yolo26n-pose.pt` model will auto-download on first run.
+> **Note:** Download TrackNetV3 weights and place them in `TrackNetV3/ckpts/`.
 
-### 3. PostgreSQL Setup (Linux / Fedora)
 
-The Spring Boot backend requires a PostgreSQL database to store match data and AI insights.
-
-**Install and initialize:**
+### 2. PostgreSQL Setup (Linux / Fedora)
 
 ```bash
 sudo dnf install postgresql-server postgresql-contrib
 sudo postgresql-setup --initdb
 sudo systemctl enable --now postgresql
-```
-
-**Create the database and user:**
-
-```bash
 sudo -i -u postgres psql
 ```
 
@@ -249,162 +196,142 @@ Run inside the psql shell:
 ```sql
 CREATE DATABASE courtsense;
 CREATE USER username WITH PASSWORD 'password';
-GRANT ALL PRIVILEGES ON DATABASE courtsense TO courtsense_admin;
+GRANT ALL PRIVILEGES ON DATABASE courtsense TO username;
 \q
 ```
 
-> You do not need to manually create tables. Spring Boot Hibernate auto-generates the schema on startup.
 
-### 4. Backend Configuration
+### 3. Backend Configuration & Start
 
-Navigate to the `backend/` directory and create a `.env` file:
+Create a `.env` file in the `backend/` directory:
 
-```bash
-cd backend
-touch .env
-```
-
-Add the following — this file is gitignored and never committed:
-
-```
+```env
 DB_URL=jdbc:postgresql://localhost:5432/courtsense
 DB_USERNAME=username
 DB_PASSWORD=password
-
 GEMINI_API_KEY=your_actual_gemini_api_key_here
-GEMINI_API_URL=https://generativelanguage.googleapis.com/...
-
-INTERNAL_SECRET_KEY=your_custom_secret_password_here
+GEMINI_API_URL=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent
+INTERNAL_SECRET_KEY=badminton-pro-2026
 ```
 
-Get a free Gemini API key at [aistudio.google.com](https://aistudio.google.com/).
-
-### 5. Start the Spring Boot Backend
-
-Ensure you have Java 21+ and Maven installed. From the `backend/` directory:
+Start the Spring Boot server:
 
 ```bash
+cd backend
 mvn clean spring-boot:run
 ```
 
-The server starts on `http://localhost:8080`.
 
-### 6. Run the Python Data Pipeline
+### 4. Frontend Configuration & Start
 
-Open a new terminal, activate `venv_stable`, and run from the project root in order.
-
-**Step 6a — Ball Tracking**
+Open a new terminal and start the Next.js development server:
 
 ```bash
-CUDA_VISIBLE_DEVICES="" python TrackNetV3/predict.py \
-  --video_file assets/badminton.mp4 \
-  --tracknet_file TrackNetV3/ckpts/TrackNet_best.pt \
-  --inpaintnet_file TrackNetV3/ckpts/InpaintNet_best.pt \
-  --save_dir TrackNetV3/output \
-  --batch_size 4
+cd frontend
+npm install
+npm run dev
 ```
 
-**Step 6b — Player Pose Extraction** *(interactive — click 4 court corners)*
 
-```bash
-python pipeline/processing/extract_pose.py
-```
+### 5. Run an Analysis
 
-**Step 6c — Smooth Player IDs**
-
-```bash
-python pipeline/processing/smooth_ids.py
-```
-
-**Step 6d — Court Zone Drawing** *(interactive — draw 4 zones per player)*
-
-```bash
-python pipeline/analysis/footprint_zones.py
-```
-
-**Step 6e — Run Automated Analysis**
-
-```bash
-# Core analysis only
-python pipeline/run_pipeline.py
-
-# Core + annotated QA videos + trajectory plots
-python pipeline/run_pipeline.py --full
-```
-
-### 7. Trigger the AI Coaching API
-
-With `coaching_payload.json` generated and Spring Boot running:
-
-```bash
-curl -X POST http://localhost:8080/api/matches/process-latest \
-     -H "X-Internal-Secret: your_custom_secret_password_here"
-```
-
-The backend parses the Python output, requests tactical advice from Gemini, and saves the full match report to PostgreSQL.
-
----
-
-## Notes on Speed Data
-
-Shot speed is stored in `px/frame` — a relative unit. Absolute km/h conversion requires knowing the court's pixel-to-meter ratio for your specific camera angle and position. Until calibrated, speed values are only meaningful as relative comparisons between players (e.g. Player 1 hits 2.38x harder than Player 2).
-
----
-
-## Development Environment
-
-Built and tested on the following machine:
-
-| Component | Details |
-| --- | --- |
-| OS | Fedora Linux 43 (Workstation Edition) |
-| Machine | HP Laptop 15s-du3xxx |
-| Processor | 11th Gen Intel® Core™ i5-1135G7 × 8 |
-| Memory | 16.0 GiB RAM |
-| IDE | Visual Studio Code |
-
-> All pipeline scripts run on CPU. No GPU required — TrackNetV3 runs with `CUDA_VISIBLE_DEVICES=""` and YOLOv8 uses `device='cpu'`. Expect ~2–5 minutes processing time per minute of video on this hardware.
+1. Open your browser to `http://localhost:3000`
+2. Upload a badminton `.mp4` file
+3. Use the interactive canvas to click the 4 corners of the court
+4. Draw the tactical quadrants for Player 1 and Player 2
+5. Click **Run Pipeline** — the UI polls the backend every 3 seconds while Python processes the video inside an isolated session folder
+6. Once complete, the dashboard renders the visual heatmaps, match statistics, and Gemini tactical insights
 
 ---
 
 ## Roadmap
 
-### ✅ Phase 1 — Python Pipeline
+### ✅ Phase 1 — Python Pipeline *(Complete)*
+
 - [x] Shuttlecock tracking via TrackNetV3
 - [x] Player pose extraction via YOLOv8-Pose
 - [x] Player ID smoothing and interpolation
 - [x] Shot detection with player attribution
-- [x] Interactive court zone calibration
+- [x] Interactive court zone calibration (UI & Headless server modes)
 - [x] Player reach heatmap generation
 - [x] Coaching payload JSON builder
-- [x] Automated pipeline runner
 
-### 🔄 Phase 2 — Spring Boot Backend *(MVP Complete)*
-- [x] Project setup and database schema
-- [x] Data parsing from Python output
-- [x] Security gatekeeper and endpoint protection
-- [x] Gemini Flash AI integration
-- [ ] Video upload endpoint
-- [ ] Async pipeline job trigger
-- [ ] User authentication via Spring Security
-- [ ] Match history per user
+### ✅ Phase 2 — Spring Boot Backend *(Complete)*
 
-### 🔄 Phase 3 — Next.js Frontend *(In Progress)*
-- [x] Monorepo setup and Tailwind styling
-- [x] Read-only match dashboard and Gemini insight UI
-- [ ] Match upload and processing status page
-- [ ] Data visualization (Court heatmaps and charts)
-- [ ] Player comparison view
+- [x] PostgreSQL schema with auto-generation via Hibernate
+- [x] Multi-tenant session isolation — UUID cookie + session-scoped filesystem
+- [x] MultipartFile video upload with session cleanup on new upload
+- [x] Async Python pipeline execution via `ProcessBuilder` + `CompletableFuture`
+- [x] Job status polling endpoint (`/api/matches/status/{jobId}`)
+- [x] Gemini Flash AI integration with exponential backoff retry
+- [x] Session-scoped static media serving via Spring Boot `WebConfig`
 
-### 🔍 Phase 4 — CourtSenseAI Scout *(coming soon)*
-Scout is a RAG-powered intelligence layer built on top of CourtSenseAI. It reads `coaching_payload.json` and automatically generates retrieval queries from your match statistics — no user input needed. Those queries search a knowledge base of professional coaching literature, BWF technical documents, and player tactical breakdowns. The result is a structured scouting report where every insight is grounded in and traceable to a specific expert source.
+### ✅ Phase 3 — Next.js Frontend *(Complete)*
+
+- [x] Next.js 15 App Router setup with Tailwind CSS
+- [x] Dark-Mode Glassmorphism UI
+- [x] Interactive HTML5 Canvas uploader — court corner marking + zone drag-to-draw
+- [x] Real-time polling engine with PROCESSING / COMPLETED / FAILED state handling
+- [x] Heatmap rendering and aesthetic stat grid
+- [x] React-Markdown integration for structured Gemini coaching output
+- [x] `credentials: 'include'` on all fetch calls for cross-origin cookie handling
+
+
+### 🔧 Phase 4 — Scaling & Reliability *(Planned)*
+
+Right now, every upload directly starts a Python process inside a `CompletableFuture`. This works for low traffic, but doesn’t scale — multiple uploads mean multiple heavy ML jobs running at once, which can exhaust CPU/RAM and slow everything down.
+
+Phase 4 introduces a proper infrastructure layer to fix this.
+
+**RabbitMQ — Controlled Processing**
+
+Instead of running ML immediately, uploads are pushed to a RabbitMQ queue. A separate Python worker processes jobs at a fixed concurrency (default: 1 at a time).
+
+This gives us:
+
+- **Backpressure**: uploads queue up, but only limited jobs run at once  
+- **Rate limiting**: ML workload is naturally controlled via config  
+- **Resilience**: failed jobs are retried automatically  
+- **Scalability**: add more workers to increase throughput  
+
+**Docker & Docker Compose**
+
+All services (Spring Boot, Next.js, PostgreSQL, RabbitMQ, Python worker) will be containerised and managed with `docker-compose`. This removes manual setup and makes the system easy to run anywhere.
+
+**Prometheus & Grafana — Observability**
+
+We’ll add monitoring to track:
+
+- **ML latency** across pipeline stages  
+- **Queue depth** to detect bottlenecks  
+- **Worker health** and job throughput  
+- **Error rates** across the system  
+
+**Phase 4 Checklist**
+
+- [ ] RabbitMQ integration — Spring Boot job producer, Python worker consumer  
+- [ ] Configurable worker concurrency (default: 1 concurrent ML job)  
+- [ ] Dockerfile for Spring Boot backend  
+- [ ] Dockerfile for Python pipeline worker  
+- [ ] `docker-compose.yml` — Postgres, RabbitMQ, backend, worker, frontend  
+- [ ] Micrometer + Prometheus metrics endpoint on Spring Boot  
+- [ ] Grafana dashboard — ML Inference Latency, Queue Depth, Worker Health, Error Rates  
+- [ ] Alerting rules for worker downtime and queue saturation  
+- [ ] Proxy the video upload through a Next.js API route so `NEXT_PUBLIC_INTERNAL_SECRET` never reaches the browser bundle — move the secret to a server-side env var only
+
+
+### 🔍 Phase 5 — CourtSenseAI Scout *(Planned)*
+
+Scout is a RAG-powered intelligence layer built on top of CourtSenseAI. It reads `coaching_payload.json` and automatically generates retrieval queries from match statistics — no user input required. Those queries search a knowledge base of professional coaching literature, BWF technical documents, and player tactical breakdowns using vector similarity search. The result is a structured scouting report where every insight is grounded in retrieved expert knowledge and traceable to a source document.
+
+CourtSenseAI tells you *what happened* in your match. Scout tells you *what it means*.
 
 - [ ] Knowledge base construction — scraping, chunking, embedding, and indexing coaching documents
-- [ ] Query engine — programmatic query generation from match statistics
-- [ ] Semantic retrieval — vector similarity search over the knowledge base
+- [ ] Query engine — programmatic query generation from match statistics (no user prompt needed)
+- [ ] Semantic retrieval — vector similarity search over the embedded knowledge base
 - [ ] Structured report generation — match data + retrieved knowledge → scouting report
-- [ ] Spring Boot integration — new Scout endpoints added to existing backend
-- [ ] Sources panel in frontend — every insight linked to the expert document behind it
+- [ ] Spring Boot integration — new `/api/scout` endpoints added to the existing backend
+- [ ] Sources panel in frontend — every Scout insight linked to the expert document behind it
 
 ---
 
