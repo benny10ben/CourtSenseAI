@@ -1,16 +1,21 @@
 import pandas as pd
 import numpy as np
-
-# ── Config ────────────────────────────────────────────────────────────────────
+import argparse
 from pathlib import Path
 
-ROOT       = Path(__file__).resolve().parents[2]
-INPUT_CSV  = ROOT / 'data' / 'output' / 'players_pose_full.csv'
-OUTPUT_CSV = ROOT / 'data' / 'output' / 'players_pose_clean.csv'
+# ── Config ────────────────────────────────────────────────────────────────────
+ROOT = Path(__file__).resolve().parents[2]
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=str, required=True, help="Session output directory")
+    args = parser.parse_args()
+
+    out_dir    = Path(args.output_dir)
+    INPUT_CSV  = out_dir / 'players_pose_full.csv'
+    OUTPUT_CSV = out_dir / 'players_pose_clean.csv'
+
     df = pd.read_csv(INPUT_CSV)
 
     top_ids = df['Player_ID'].value_counts().nlargest(2).index.tolist()

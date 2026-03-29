@@ -1,17 +1,21 @@
 import pandas as pd
-import os
-
-# ── Config ────────────────────────────────────────────────────────────────────
+import argparse
 from pathlib import Path
 
-ROOT       = Path(__file__).resolve().parents[2]
-BALL_CSV   = ROOT / 'TrackNetV3' / 'output' / 'badminton_ball.csv'
-PLAYER_CSV = ROOT / 'data' / 'output' / 'players_pose_clean.csv'
-MASTER_CSV = ROOT / 'data' / 'output' / 'rally_master.csv'
+# ── Config ────────────────────────────────────────────────────────────────────
+ROOT = Path(__file__).resolve().parents[2]
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=str, required=True, help="Session output directory")
+    args = parser.parse_args()
+
+    out_dir    = Path(args.output_dir)
+    BALL_CSV   = out_dir / 'badminton_ball.csv'
+    PLAYER_CSV = out_dir / 'players_pose_clean.csv'
+    MASTER_CSV = out_dir / 'rally_master.csv'
+
     print("Loading data streams...")
 
     if not BALL_CSV.exists():

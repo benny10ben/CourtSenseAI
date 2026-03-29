@@ -3,13 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from scipy.ndimage import gaussian_filter
-
-# ── Config ────────────────────────────────────────────────────────────────────
+import argparse
 from pathlib import Path
 
+# ── Config ────────────────────────────────────────────────────────────────────
 ROOT     = Path(__file__).resolve().parents[2]
-CSV_FILE = ROOT / 'data' / 'output' / 'rally_master.csv'
-OUT_FILE = ROOT / 'data' / 'output' / 'player_heatmap.png'
 
 BLUR_SIGMA      = 10
 GRID_SIZE       = 150
@@ -18,14 +16,11 @@ COURT_Y_PAD     = 120
 COURT_X_PAD     = 60
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def get_home(x_vals, y_vals):
     return x_vals.median(), y_vals.median()
 
-
 def get_distance_from_home(x_vals, y_vals, home_x, home_y):
     return np.sqrt((x_vals - home_x) ** 2 + (y_vals - home_y) ** 2)
-
 
 def make_density(x_vals, y_vals, x_range, y_range, grid=150, sigma=10):
     heatmap, _, _ = np.histogram2d(
@@ -37,7 +32,6 @@ def make_density(x_vals, y_vals, x_range, y_range, grid=150, sigma=10):
     if heatmap.max() > 0:
         heatmap = heatmap / heatmap.max()
     return heatmap
-
 
 def draw_court(ax, x_range, y_range, net_y):
     x_min, x_max = x_range
@@ -68,14 +62,12 @@ def draw_court(ax, x_range, y_range, net_y):
             'NET', color='yellow', fontsize=8,
             ha='center', va='bottom', fontweight='bold', zorder=5)
 
-
 def add_zone_labels(ax, x_range, y_range, net_y):
     cx = (x_range[0] + x_range[1]) / 2
     kw = dict(fontsize=8, color='white', alpha=0.5,
               ha='center', va='center', zorder=5, fontweight='bold')
     ax.text(cx, (y_range[0] + net_y) / 2, 'FAR\nCOURT', **kw)
     ax.text(cx, (net_y + y_range[1]) / 2, 'NEAR\nCOURT', **kw)
-
 
 def plot_panel(ax, title, cmap,
                reach_x, reach_y,
@@ -135,7 +127,6 @@ def plot_panel(ax, title, cmap,
     for spine in ax.spines.values():
         spine.set_edgecolor('white')
 
-
 def plot_combined(ax, title,
                   p1_reach_x, p1_reach_y, p1_hx, p1_hy, p1_radius,
                   p2_reach_x, p2_reach_y, p2_hx, p2_hy, p2_radius,
@@ -192,10 +183,21 @@ def plot_combined(ax, title,
     for spine in ax.spines.values():
         spine.set_edgecolor('white')
 
-
 def main():
-    df = pd.read_csv(CSV_FILE)
-    print(f"Loaded {len(df)} frames from {CSV_FILE}")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=str, required=True, help="Session output directory")
+    args = parser.parse_args()
+    
+    out_dir = Path(args.output_dir)
+    csv_file = out_dir / 'rally_master.csv'
+    out_file = out_dir / 'player_heatmap.png'
+
+    if not csv_file.exists():
+        print(f"❌ Error: {csv_file} not found.")
+        return
+
+    df = pd.read_csv(csv_file)
+    print(f"Loaded {len(df)} frames from {csv_file}")
 
     p1 = df[df['P1_KP16_Y'] > 0][['P1_KP16_X', 'P1_KP16_Y']].copy().reset_index(drop=True)
     p2 = df[df['P2_KP16_Y'] > 0][['P2_KP16_X', 'P2_KP16_Y']].copy().reset_index(drop=True)
@@ -268,13 +270,12 @@ def main():
         fontsize=10, color='white', y=1.01
     )
 
-    plt.savefig(OUT_FILE, dpi=180, bbox_inches='tight',
+    plt.savefig(out_file, dpi=180, bbox_inches='tight',
                 facecolor=fig.get_facecolor())
-    print(f"\n✅ Heatmap saved to : {OUT_FILE}")
+    print(f"\n✅ Heatmap saved to : {out_file}")
     print(f"   Net estimated at Y = {net_y:.0f}")
     print(f"\nTip: Adjust REACH_THRESHOLD (currently {REACH_THRESHOLD}) to change sensitivity.")
     print(f"     Adjust COURT_Y_PAD (currently {COURT_Y_PAD}) to change court height.")
-
 
 if __name__ == '__main__':
     main()

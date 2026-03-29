@@ -1,15 +1,14 @@
 import cv2
 import numpy as np
 import pandas as pd
+import argparse
+import json
 from ultralytics import YOLO
-
-# ── Config ────────────────────────────────────────────────────────────────────
 from pathlib import Path
 
+# ── Config ────────────────────────────────────────────────────────────────────
 ROOT        = Path(__file__).resolve().parents[2]
 MODEL_PATH  = ROOT / 'models' / 'yolo26n-pose.pt'
-VIDEO_FILE  = ROOT / 'assets' / 'badminton.mp4'
-OUT_CSV     = ROOT / 'data' / 'output' / 'players_pose_full.csv'
 START_FRAME = 1
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -23,11 +22,11 @@ def mouse_callback(event, x, y, flags, param):
         print(f"Point captured: ({x}, {y})")
 
 
-def calibrate_court(cap):
+def calibrate_court(cap, video_file):
     global roi_points
 
     if not cap.isOpened():
-        raise ValueError(f"Cannot open video: {VIDEO_FILE}")
+        raise ValueError(f"Cannot open video: {video_file}")
 
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"Video opened. Total frames: {total}")
@@ -76,24 +75,53 @@ def calibrate_court(cap):
 
 
 def main():
+    # 1. SETUP ARGUMENT PARSER
+    parser = argparse.ArgumentParser(description="Extract player poses from badminton video.")
+    parser.add_argument("--coords", type=str, help="Path to JSON file containing court coordinates", default=None)
+    parser.add_argument("--video", type=str, help="Path to the uploaded video file", default=str(ROOT / 'assets' / 'badminton.mp4'))
+    parser.add_argument("--output-dir", type=str, required=True, help="Session output directory")
+    args = parser.parse_args()
+
+    video_file = Path(args.video)
+    out_dir    = Path(args.output_dir)
+    OUT_CSV    = out_dir / 'players_pose_full.csv'
+
     print("Loading YOLO-Pose model...")
     model = YOLO(MODEL_PATH)
 
-    cap = cv2.VideoCapture(VIDEO_FILE)
-    if not cap.isOpened():
-        raise FileNotFoundError(f"Cannot open video: {VIDEO_FILE}")
+    # 2. THE DUAL-MODE ROUTER
+    if args.coords:
+        # ---------------------------------------------------------
+        # SERVER MODE (Headless)
+        # ---------------------------------------------------------
+        print(f"Headless mode activated. Reading coordinates from {args.coords}...")
+        with open(args.coords, 'r') as f:
+            payload = json.load(f)
+            
+        # Extract the X and Y values from the JSON structure
+        corners = [[pt['x'], pt['y']] for pt in payload['court_corners']]
+        
+        # Convert into the exact same NumPy array that the interactive clicking generates
+        court_polygon = np.array(corners, np.int32)
+        print("Court geofence loaded from JSON.")
+        
+    else:
+        # ---------------------------------------------------------
+        # LOCAL MODE (Interactive)
+        # ---------------------------------------------------------
+        cap = cv2.VideoCapture(str(video_file))
+        court_polygon = calibrate_court(cap, video_file)
+        cap.release() # release before model.track() opens the video itself
+        print("Court geofence locked via UI.")
 
-    # Step 1 — interactive court calibration
-    court_polygon = calibrate_court(cap)
-    print("Court geofence locked. Starting player tracking...")
 
-    # Step 2 — reset and process from frame 0
+    # 3. RUN THE AI TRACKING
+    print("Starting player tracking...")
     pose_data = []
     frame_idx = 0
-    cap.release()  # release before model.track() opens the video itself
 
     results = model.track(
-        source=VIDEO_FILE,
+        source=str(video_file),
         persist=True,
         tracker="bytetrack.yaml",
         stream=True,

@@ -3,45 +3,23 @@ detect_shots.py
 ---------------
 Analyses the CSV to detect hits/bounces and compute shot statistics.
 A hit is detected when the ball's vertical direction (Y velocity) reverses.
-
-Now also saves:
-  - data/output/shots_detected.csv   → hit events with player attribution
-  - data/output/rally_breaks.csv     → rally gap events
-
-NOTE on speed: Speed is stored in px/frame only. km/h conversion requires
-accurate PIXELS_PER_METER calibration against your specific video/court size.
-Relative speed comparisons between players are still valid without this.
-
-Usage:
-    python3 detect_shots.py
 """
 
 import pandas as pd
 import numpy as np
+import cv2
+import argparse
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
-ROOT            = Path(__file__).resolve().parents[2]
-CSV_FILE        = ROOT / 'TrackNetV3' / 'output' / 'badminton_ball.csv'
-MASTER_CSV      = ROOT / 'data' / 'output' / 'rally_master.csv'
-OUT_SHOTS_CSV   = ROOT / 'data' / 'output' / 'shots_detected.csv'
-OUT_RALLIES_CSV = ROOT / 'data' / 'output' / 'rally_breaks.csv'
-
+ROOT             = Path(__file__).resolve().parents[2]
 MIN_SPEED        = 15.0   # px/frame — filters out tracking noise
 COOLDOWN         = 10     # minimum frames between two consecutive hits
-import cv2
-VIDEO_FILE = ROOT / 'assets' / 'badminton.mp4'
-
-cap = cv2.VideoCapture(str(VIDEO_FILE))
-FPS = cap.get(cv2.CAP_PROP_FPS) if cap.isOpened() else 30.0
-cap.release()
 MAX_HIT_DISTANCE = 350.0  # pixels — ignore players farther than this from ball
 # ─────────────────────────────────────────────────────────────────────────────
 
-
 def distance(x1, y1, x2, y2):
     return np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-
 
 def determine_hitter(frame_num, ball_x, ball_y, master_df):
     """
@@ -78,15 +56,30 @@ def determine_hitter(frame_num, ball_x, ball_y, master_df):
 
     return 1 if d1 < d2 else 2
 
-
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=str, required=True, help="Session output directory")
+    args = parser.parse_args()
+
+    out_dir = Path(args.output_dir)
+    CSV_FILE        = out_dir / 'badminton_ball.csv'
+    MASTER_CSV      = out_dir / 'rally_master.csv'
+    OUT_SHOTS_CSV   = out_dir / 'shots_detected.csv'
+    OUT_RALLIES_CSV = out_dir / 'rally_breaks.csv'
+
+    # Safely find the video for FPS calculation
+    session_video = out_dir.parent / 'assets' / 'badminton.mp4'
+    VIDEO_FILE = session_video if session_video.exists() else ROOT / 'assets' / 'badminton.mp4'
+
+    cap = cv2.VideoCapture(str(VIDEO_FILE))
+    FPS = cap.get(cv2.CAP_PROP_FPS) if cap.isOpened() else 30.0
+    cap.release()
+
     df      = pd.read_csv(CSV_FILE)
     visible = df[df['Visibility'] == 1].copy().reset_index(drop=True)
 
-    # Load master for player attribution
     if not MASTER_CSV.exists():
         print("⚠️  rally_master.csv not found. Player attribution skipped.")
-        print("   Run merge_data.py first for full output.")
         master_df = pd.DataFrame()
     else:
         master_df = pd.read_csv(MASTER_CSV)
@@ -141,9 +134,6 @@ def main():
             last_hit_frame = curr_frame
 
     # ── Enforce Badminton Alternation Rule ─────────────────────────────────
-    # In badminton players must alternate hits. Use distance-based guesses
-    # to find which alternating sequence (P1 first or P2 first) fits best,
-    # then enforce perfect alternation.
     if len(hits) > 0:
         seq1 = [1 if i % 2 == 0 else 2 for i in range(len(hits))]
         seq2 = [2 if i % 2 == 0 else 1 for i in range(len(hits))]
@@ -205,14 +195,12 @@ def main():
     print(f'Total shots detected : {len(hits)}')
     print(f'Total rally breaks   : {len(invisible_runs)}')
 
-    # ── Save outputs ──────────────────────────────────────────────────────
     pd.DataFrame(hits).to_csv(OUT_SHOTS_CSV, index=False)
     pd.DataFrame(invisible_runs).to_csv(OUT_RALLIES_CSV, index=False)
 
     print()
     print(f'✅ Shots saved to    : {OUT_SHOTS_CSV}')
     print(f'✅ Rallies saved to  : {OUT_RALLIES_CSV}')
-
 
 if __name__ == '__main__':
     main()

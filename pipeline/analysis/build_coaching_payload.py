@@ -3,37 +3,18 @@ build_coaching_payload.py
 --------------------------
 Reads all pipeline output CSVs and builds a single clean JSON payload
 for Gemini AI coaching insights.
-
-Reads:
-  - data/output/shots_detected.csv
-  - data/output/rally_breaks.csv
-  - data/output/zone_footprint.csv
-  - data/output/rally_master.csv
-  - assets/badminton.mp4              ← for accurate duration
-
-Produces:
-  - data/output/coaching_payload.json
-
-Usage:
-    python3 build_coaching_payload.py
 """
 
 import cv2
 import json
 import pandas as pd
 import numpy as np
+import argparse
 from pathlib import Path
 
 # ── Config ────────────────────────────────────────────────────────────────────
-ROOT          = Path(__file__).resolve().parents[2]
-SHOTS_CSV     = ROOT / 'data'   / 'output' / 'shots_detected.csv'
-RALLIES_CSV   = ROOT / 'data'   / 'output' / 'rally_breaks.csv'
-FOOTPRINT_CSV = ROOT / 'data'   / 'output' / 'zone_footprint.csv'
-MASTER_CSV    = ROOT / 'data'   / 'output' / 'rally_master.csv'
-VIDEO_FILE    = ROOT / 'assets' / 'badminton.mp4'
-OUT_JSON      = ROOT / 'data'   / 'output' / 'coaching_payload.json'
+ROOT = Path(__file__).resolve().parents[2]
 # ─────────────────────────────────────────────────────────────────────────────
-
 
 def load_and_check(path, required_cols=None):
     if not path.exists():
@@ -49,7 +30,6 @@ def load_and_check(path, required_cols=None):
         print(f"  ⚠️  {path.name} has no data rows — returning empty DataFrame.")
         return pd.DataFrame(columns=required_cols) if required_cols else pd.DataFrame()
 
-
 def get_video_duration(video_path):
     """Read actual frame count and FPS directly from the video file."""
     cap = cv2.VideoCapture(str(video_path))
@@ -60,7 +40,6 @@ def get_video_duration(video_path):
     fps          = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
     return total_frames, fps
-
 
 def build_hit_stats(shots_df, player_id):
     """Compute hit count and relative speed stats for a given player."""
@@ -81,13 +60,8 @@ def build_hit_stats(shots_df, player_id):
         'min_speed_pxpf': round(float(player_shots['Speed'].min()), 1),
     }
 
-
 def build_speed_comparison(shots_df):
-    """
-    Compare relative hitting power between players.
-    Speed ratio > 1.0 means P1 hits harder than P2.
-    km/h excluded — requires court pixel calibration for accuracy.
-    """
+    """Compare relative hitting power between players."""
     p1     = shots_df[shots_df['Player_ID'] == 1]['Speed']
     p2     = shots_df[shots_df['Player_ID'] == 2]['Speed']
     p1_avg = float(p1.mean()) if not p1.empty else 0.0
@@ -104,7 +78,6 @@ def build_speed_comparison(shots_df):
         'p2_avg_speed_pxpf'   : round(p2_avg, 1),
         'speed_ratio_p1_vs_p2': ratio,
     }
-
 
 def build_zone_stats(footprint_df, player_id):
     """Compute zone percentage breakdown for a given player."""
@@ -139,15 +112,8 @@ def build_zone_stats(footprint_df, player_id):
         'most_occupied_zone': most_occupied,
     }
 
-
 def build_home_position(footprint_df, player_id):
-    """
-    Derives where the player naturally stands using zone percentages.
-    More accurate than pixel math since zone data is already validated.
-
-    Horizontal: left% (FL+BL) vs right% (FR+BR)
-    Depth:      front% (FL+FR) vs back% (BL+BR) within their own half
-    """
+    """Derives where the player naturally stands using zone percentages."""
     player_zones = footprint_df[footprint_df['Player'] == player_id]
     if player_zones.empty:
         return 'unknown'
@@ -167,7 +133,6 @@ def build_home_position(footprint_df, player_id):
     front_pct = (fl + fr) / total * 100
     back_pct  = (bl + br) / total * 100
 
-    # Horizontal bias
     if left_pct > 60:
         h_pos = 'left side'
     elif right_pct > 60:
@@ -175,7 +140,6 @@ def build_home_position(footprint_df, player_id):
     else:
         h_pos = 'center'
 
-    # Depth within own half
     if front_pct > 60:
         depth = 'front-court'
     elif back_pct > 60:
@@ -185,12 +149,8 @@ def build_home_position(footprint_df, player_id):
 
     return f"{h_pos}, {depth}"
 
-
 def build_court_coverage(master_df, player_id, all_players_data):
-    """
-    Converts pixel range into a readable description of how much
-    of the court the player covered during the match.
-    """
+    """Converts pixel range into a readable description of court coverage."""
     x_col = f'P{player_id}_KP16_X'
     y_col = f'P{player_id}_KP16_Y'
 
@@ -201,7 +161,6 @@ def build_court_coverage(master_df, player_id, all_players_data):
     x_range = int(valid[x_col].max() - valid[x_col].min())
     y_range = int(valid[y_col].max() - valid[y_col].min())
 
-    # Reference: total court pixel width and depth from all players combined
     all_x       = all_players_data['all_x']
     all_y       = all_players_data['all_y']
     court_w     = int(all_x.max() - all_x.min())
@@ -210,7 +169,6 @@ def build_court_coverage(master_df, player_id, all_players_data):
     h_pct = (x_range / court_w * 100) if court_w > 0 else 0
     v_pct = (y_range / court_h * 100) if court_h > 0 else 0
 
-    # Convert percentage to readable label
     def label(pct):
         if pct >= 70:   return 'wide'
         elif pct >= 40: return 'moderate'
@@ -220,7 +178,6 @@ def build_court_coverage(master_df, player_id, all_players_data):
         'horizontal': f"{label(h_pct)} ({h_pct:.0f}% of court width)",
         'vertical'  : f"{label(v_pct)} ({v_pct:.0f}% of court depth)",
     }
-
 
 def build_rally_stats(rallies_df, fps, total_frames):
     """Compute rally count and duration stats."""
@@ -241,13 +198,28 @@ def build_rally_stats(rallies_df, fps, total_frames):
         'shortest_rally_seconds'   : round(float(lengths_sec.min()), 1),
     }
 
-
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output-dir", type=str, required=True, help="Session output directory")
+    args = parser.parse_args()
+
+    out_dir = Path(args.output_dir)
+
     print("=" * 55)
     print("🏸 Building Coaching Payload")
     print("=" * 55)
 
-    # ── Load all CSVs ─────────────────────────────────────────────────────
+    # ── Dynamically map paths based on the session directory ────────
+    SHOTS_CSV     = out_dir / 'shots_detected.csv'
+    RALLIES_CSV   = out_dir / 'rally_breaks.csv'
+    FOOTPRINT_CSV = out_dir / 'zone_footprint.csv'
+    MASTER_CSV    = out_dir / 'rally_master.csv'
+    OUT_JSON      = out_dir / 'coaching_payload.json'
+    
+    # Fallback to global video if the session-specific one doesn't exist yet (for local runs)
+    session_video = out_dir.parent / 'assets' / 'badminton.mp4'
+    VIDEO_FILE    = session_video if session_video.exists() else ROOT / 'assets' / 'badminton.mp4'
+
     print("\nLoading pipeline outputs...")
     shots_df     = load_and_check(SHOTS_CSV)
     rallies_df   = load_and_check(
@@ -257,7 +229,6 @@ def main():
     footprint_df = load_and_check(FOOTPRINT_CSV)
     master_df    = load_and_check(MASTER_CSV)
 
-    # ── Get accurate duration from video ──────────────────────────────────
     video_frames, fps = get_video_duration(VIDEO_FILE)
     if video_frames and fps:
         duration_sec = round(video_frames / fps, 1)
@@ -273,7 +244,6 @@ def main():
     print(f"  Duration      : {duration_sec}s")
     print(f"  Shots         : {total_shots} attributed, {unattributed} unattributed")
 
-    # ── Shared court reference data for relative position calculations ────
     all_players_data = {
         'all_x': pd.concat([
             master_df[master_df['P1_KP16_X'] > 0]['P1_KP16_X'],
@@ -285,7 +255,6 @@ def main():
         ]),
     }
 
-    # ── Build payload ─────────────────────────────────────────────────────
     payload = {
         "match_summary": {
             "duration_seconds": duration_sec,
@@ -309,11 +278,9 @@ def main():
         },
     }
 
-    # ── Save JSON ─────────────────────────────────────────────────────────
     with open(OUT_JSON, 'w') as f:
         json.dump(payload, f, indent=2)
 
-    # ── Print summary ─────────────────────────────────────────────────────
     print()
     print("=" * 55)
     print("📦 PAYLOAD SUMMARY")
@@ -321,7 +288,6 @@ def main():
     print(json.dumps(payload, indent=2))
     print()
     print(f"✅ Saved to: {OUT_JSON}")
-
 
 if __name__ == '__main__':
     main()
