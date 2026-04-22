@@ -1,0 +1,309 @@
+================================================================
+COURTSENSEAI SCOUT — FULL PROJECT BRIEF
+================================================================
+
+WHAT IT IS
+----------
+CourtSenseAI Scout is the intelligence companion to CourtSenseAI.
+Where CourtSenseAI tells you what happened in your match, Scout
+tells you what it means — by connecting your match patterns to a
+knowledge base of professional badminton coaching literature,
+player analysis, and tactical guides.
+
+It is a RAG-powered scouting platform. Not a chatbot. You get a
+structured tactical intelligence report generated from your match
+data cross-referenced against expert knowledge, with every insight
+traceable to a specific source document.
+
+
+THE USER STORY
+--------------
+After CourtSenseAI analyses your match video and produces
+coaching_payload.json, Scout reads that payload and asks the
+knowledge base questions on your behalf:
+
+- Player 1 spends 38% of time in Back-Right and hits 2.4x harder
+  than Player 2 → Scout retrieves coaching articles about power
+  players with back-court bias and their tactical weaknesses
+
+- Player 2 occupies Front-Left 44.7% of the time → Scout retrieves
+  literature about net-dominant players and how to exploit their
+  positioning
+
+- 22 shots in 21 seconds with no rally breaks → Scout retrieves
+  articles about high-tempo rally patterns and endurance strategies
+
+Output is a structured scouting report — specific insights grounded
+in retrieved expert knowledge with source references. Not generic
+tips. Traceable, expert-backed coaching intelligence.
+
+
+KNOWLEDGE BASE — WHAT GETS INDEXED
+-----------------------------------
+This is the RAG corpus. Everything gets embedded and stored in
+pgvector using a local HuggingFace sentence-transformers model.
+
+Sources:
+- BWF (Badminton World Federation) technical coaching documents
+- Professional player tactical breakdowns — Axelsen, Momota,
+  Lee Chong Wei, Sindhu, Carolina Marin
+- Tournament match reports and analysis from BWF website,
+  BadmintonWorld, Olympics coverage
+- Coaching technique guides — footwork patterns, shot selection
+  by court position, defensive vs offensive positioning
+- Sports science papers on badminton biomechanics and strategy
+
+Target corpus size: 500-1000 documents.
+
+
+ARCHITECTURE
+------------
+
+CourtSenseAI Pipeline
+        │
+        ▼
+coaching_payload.json
+        │
+        ▼
+Scout Query Builder
+(converts match stats into retrieval queries)
+        │
+        ▼
+pgvector Knowledge Base
+(semantic search over indexed documents)
+        │
+        ▼
+Retrieved Chunks
+(top 5 most relevant passages per query)
+        │
+        ▼
+Gemini Flash
+(synthesises chunks + match data into structured report)
+        │
+        ▼
+Structured Scouting Report
+(served via Spring Boot API to React or Android frontend)
+
+
+EMBEDDING STRATEGY
+------------------
+- Embedding model: HuggingFace sentence-transformers (local, free)
+  Recommended model: all-MiniLM-L6-v2 or nomic-embed-text
+- Runs entirely on CPU — no GPU needed, no API cost, no rate limits
+- Same model used for both indexing documents and embedding queries
+  at retrieval time — consistency is critical
+
+- Synthesis: Gemini Flash API (free tier — 15 req/min, 1M tokens/day)
+  Used only for the final report generation step, not for embeddings
+
+This separation is a deliberate architectural decision:
+  Retrieval layer  → local, free, no vendor dependency
+  Synthesis layer  → Gemini Flash, fast, high quality prose output
+
+
+HOW IT GETS BUILT — STEP BY STEP
+----------------------------------
+
+PHASE 1 — Knowledge Base Construction
+
+Step 1 — Scraper
+  Python scraper collects badminton coaching articles, player
+  profiles, and tactical guides. Raw text stored in
+  data/scout/raw/. Each document gets metadata:
+  source URL, date, player names mentioned, topic tags.
+
+Step 2 — Chunking
+  Split documents into ~500 token chunks with 50 token overlap.
+  Overlap prevents key sentences being split across chunks.
+  Chunk at paragraph boundaries. Never mid-sentence.
+  Tag each chunk with metadata: court position relevance,
+  shot type, player style category.
+
+Step 3 — Embedding
+  Use sentence-transformers locally to convert each chunk to
+  a vector. Store chunk text + vector + metadata in pgvector.
+
+Step 4 — Indexing pipeline script
+  pipeline/scout/build_knowledge_base.py
+  Runs full scrape → chunk → embed → store pipeline.
+  Run once to build corpus, periodically to add new content.
+
+
+PHASE 2 — Query Engine
+
+Step 5 — Query Builder
+  Spring Boot service reads coaching_payload.json and generates
+  targeted retrieval queries from match statistics.
+  Not one generic query — multiple specific queries:
+
+    "back-court dominant player tactical weaknesses badminton"
+    "net-biased player positioning exploitation"
+    "high tempo rally endurance strategy badminton"
+    "power player vs defensive player badminton tactics"
+    "front-left court bias opponent strategy"
+
+Step 6 — Retrieval
+  For each query: embed it using the same sentence-transformers
+  model, run cosine similarity search in pgvector, retrieve
+  top 5 chunks. Apply metadata filtering — prefer sources
+  mentioning court positions matching the match data.
+
+Step 7 — Context Assembly
+  Combine retrieved chunks with match stats into a structured
+  Gemini prompt. Prompt instructs Gemini to return a specific
+  JSON format — not free-form text. Sections for Player 1
+  insights, Player 2 insights, tactical recommendations,
+  and source references.
+
+
+PHASE 3 — Spring Boot Integration
+
+New endpoints added to CourtSenseAI backend:
+
+  POST /api/scout/analyse/{matchId}
+  → triggers Scout analysis for a completed match
+  → returns job ID (async, runs in background)
+
+  GET /api/scout/report/{matchId}
+  → returns structured scouting report once ready
+
+  GET /api/scout/sources/{matchId}
+  → returns source documents retrieved during analysis
+
+New Spring Boot components:
+  ScoutService.java          — orchestrates full Scout flow
+  QueryBuilder.java          — converts payload stats to queries
+  VectorSearchRepository.java — Spring Data pgvector interface
+  ScoutReport.java           — JPA entity storing report per match
+  ScoutController.java       — REST endpoints
+
+
+PHASE 4 — Frontend
+
+Two options — decide when you reach Month 3 based on
+where your internship interviews are heading.
+
+OPTION A: React (Web)
+  Add Scout tab to existing CourtSenseAI match dashboard.
+  Scout report UI shows:
+  - Player 1 tactical profile
+  - Player 2 tactical profile
+  - Key weaknesses with specific zones and scenarios
+  - Recommended tactics — shot selection and positioning
+  - Sources panel — article excerpts that grounded each insight
+    with links to original documents
+
+  Best if: targeting full stack or general SWE roles,
+  want faster build, want consistency with CourtSenseAI web UI.
+
+OPTION B: Android App (Kotlin + Jetpack Compose)
+  Native Android app covering full CourtSenseAI + Scout flow.
+  Match history screen, match detail with stats and heatmaps,
+  Scout report with sources panel, coaching insights feed.
+  Modern Material 3 design with Jetpack Compose UI.
+
+  Best if: targeting mobile SWE roles specifically,
+  want to stand out from web-heavy portfolios,
+  comfortable with longer build time.
+
+  Either way the Sources Panel is non-negotiable.
+  Every insight must link to the expert document behind it.
+  This is what separates Scout from a generic AI chatbot
+  and is your strongest talking point in interviews.
+
+
+TECH STACK
+----------
+
+Component                    Technology
+-----------                  ----------
+Knowledge base scraping      Python, BeautifulSoup, requests
+Chunking                     Python, LangChain text splitters
+Embedding model              sentence-transformers (HuggingFace, local)
+                             Recommended: all-MiniLM-L6-v2
+Vector database              pgvector (PostgreSQL extension)
+Knowledge base indexing      Python pipeline script
+Query engine                 Spring Boot, Spring Data JPA
+LLM synthesis                Gemini Flash API (free tier)
+REST API                     Spring Boot
+Frontend Option A            React
+Frontend Option B            Android — Kotlin + Jetpack Compose
+
+
+WHAT YOU LEARN FOR YOUR RESUME
+-------------------------------
+- RAG architecture end to end
+- Local embedding models with sentence-transformers
+- pgvector — vector similarity search inside PostgreSQL
+- Cosine similarity and semantic search
+- Metadata filtering in hybrid search
+- Structured output prompting with Gemini
+- Async job processing in Spring Boot
+- Kotlin + Jetpack Compose (if Android route chosen)
+- Deliberate architectural decision making —
+  local embeddings vs hosted LLM, when each is appropriate
+
+
+WHY THIS IS NOT A TUTORIAL PROJECT
+------------------------------------
+Three things tutorial RAG projects never do:
+
+1. Programmatic query generation
+   Most RAG tutorials take a user's typed question and search
+   for it. Scout generates its own queries from match statistics.
+   No user types anything. This is agentic retrieval.
+
+2. Sources panel in the UI
+   Most tutorials stop at "here is the answer." Scout shows
+   which expert documents grounded each insight. Responsible
+   AI design. Strong interview talking point.
+
+3. Domain-specific chunking with metadata
+   Naive token-count chunking destroys article structure.
+   Scout chunks at paragraph boundaries with overlap and
+   tags each chunk by topic — court position, shot type,
+   player style. Metadata filtering during retrieval makes
+   results precise rather than generic.
+
+
+INTERVIEW STORY
+---------------
+"CourtSenseAI Scout is a RAG system that connects match video
+analysis to expert coaching knowledge. The interesting engineering
+challenge was that I wasn't retrieving based on a user's typed
+question — I was generating retrieval queries programmatically
+from structured match statistics. A player spending 38% of their
+time in the back-right corner becomes the query 'back-court
+dominant player tactical weaknesses in badminton.'
+
+I deliberately separated the embedding layer from the synthesis
+layer. Embeddings run locally using sentence-transformers — no
+API cost, no rate limits, no vendor dependency for the retrieval
+core. Gemini Flash handles only the final synthesis step where
+you actually want high quality natural language output.
+
+The sources panel in the UI was a deliberate product decision —
+every coaching insight links back to the specific expert document
+that grounded it. That traceability is what separates it from
+a chatbot that just makes things up."
+
+
+PORTFOLIO NARRATIVE
+-------------------
+CourtSenseAI       → what happened in your match
+                     CV + ML pipeline + Spring Boot + Gemini
+
+CourtSenseAI Scout → what the experts say about it
+                     RAG + pgvector + local embeddings + Gemini
+
+LegalLens          → contract risk in plain English
+                     RAG + document AI + structured output
+
+Three projects. Two domains. One coherent story:
+You build complete AI systems that extract intelligence from
+complex inputs and present it in a way humans can act on.
+
+================================================================
+WHEN TO BUILD: Month 3 (after finishing CourtSenseAI Month 1
+and LegalLens Month 2)
+================================================================

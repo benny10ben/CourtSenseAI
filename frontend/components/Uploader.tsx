@@ -81,7 +81,7 @@ export default function Uploader() {
         ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
         ctx.fillStyle = color;
         ctx.font = 'bold 24px inherit';
-        ctx.fillText(`${prefix}-${key.split('_')[0].toUpperCase()}`, x1 + 10, y1 + 32);
+        ctx.fillText(`${prefix}-${key.replace('_', ' ').toUpperCase()}`, x1 + 10, y1 + 32);
       });
     };
 
@@ -293,7 +293,7 @@ export default function Uploader() {
                     className={`py-2 rounded-lg text-[8px] font-black uppercase tracking-tighter border transition-all
                       ${activeZone === key ? 'bg-[#4ade80] text-black border-transparent' : 'bg-white/5 text-gray-500 border-white/5'}`}
                   >
-                    {key.split('_')[0]}
+                    {key.split('_').map(w => w[0].toUpperCase()).join('')}
                   </button>
                 ))}
               </div>
