@@ -126,7 +126,7 @@ def main():
         tracker="bytetrack.yaml",
         stream=True,
         device='cpu',
-        imgsz=640,   # 640 is faster on CPU; use 1280 if far player is missed
+        imgsz=920,   # 640 is faster on CPU; use 1280 if far player is missed
         verbose=False
     )
 
